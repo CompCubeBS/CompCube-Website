@@ -1,13 +1,19 @@
 <script lang="ts">
+	import { invalidateAll } from "$app/navigation";
 	import NumberFlow from "@number-flow/svelte";
+	import { createApiClient } from "$lib/api";
+	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageHeader from "$lib/components/PageHeader.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
 	import type { Match, MockClient } from "compcube-client";
 	import { onMount } from "svelte";
 
-	let { data, form } = $props();
+	let { data } = $props();
+	const auth = useAuth();
 	let now = $state(Date.now());
+	let notice = $state<{ success: boolean; message: string } | null>(null);
+	let submitting = $state(false);
 	const matches = $derived.by((): Match[] => {
 		const grouped = new Map<string, Match>();
 		for (const client of data.clients as MockClient[]) {
@@ -43,6 +49,43 @@
 	function currentRound(match: Match) {
 		return match.rounds?.findLast((round) => !round.endedAt);
 	}
+	async function runMutation(request: () => Promise<Response>, success: string) {
+		submitting = true;
+		try {
+			const response = await request();
+			if (!response.ok) throw new Error("The mock client action was rejected.");
+			notice = { success: true, message: success };
+			await invalidateAll();
+		} catch (error) {
+			notice = { success: false, message: error instanceof Error ? error.message : "The mock client action was rejected." };
+		} finally {
+			submitting = false;
+		}
+	}
+	async function createMatch(event: SubmitEvent) {
+		event.preventDefault();
+		const form = new FormData(event.currentTarget as HTMLFormElement);
+		await runMutation(() => createApiClient(fetch, auth.token).mockClients.createMatch({ redPlatformId: String(form.get("redPlatformId") ?? "").trim(), bluePlatformId: String(form.get("bluePlatformId") ?? "").trim(), queueGuid: String(form.get("queueGuid") ?? "") }), "Mock match created.");
+	}
+	async function act(event: SubmitEvent) {
+		event.preventDefault();
+		const form = new FormData(event.currentTarget as HTMLFormElement);
+		const clientGuid = String(form.get("clientGuid") ?? "");
+		const actionName = String(form.get("actionName") ?? "");
+		let action: import("compcube-client").MockClientAction;
+		if (actionName === "discard") action = { action: "discard", mapGuids: form.getAll("mapGuids").map(String) };
+		else if (actionName === "pick") action = { action: "pick", mapGuid: String(form.get("mapGuid") ?? "") };
+		else if (actionName === "score") {
+			const rawScore = Number(form.get("rawScore"));
+			const reported = Number(form.get("modifiedScore"));
+			action = { action: "score", roundGuid: String(form.get("roundGuid") ?? ""), rawScore, modifiedScore: Number.isInteger(reported) ? reported : rawScore, noFailTriggered: form.get("noFailTriggered") === "on", proMode: form.get("proMode") === "on", missCount: Number(form.get("missCount")), fullCombo: form.get("fullCombo") === "on" };
+		} else if (actionName === "forfeit" || actionName === "disconnect") action = { action: actionName };
+		else {
+			notice = { success: false, message: "Unknown mock client action." };
+			return;
+		}
+		await runMutation(() => createApiClient(fetch, auth.token).mockClients.action({ clientGuid, action }), "Mock client updated.");
+	}
 </script>
 
 <PageMeta title="Mock clients" description="Run private CompCube matches as web-controlled clients." path="/admin/mock-clients" />
@@ -50,14 +93,14 @@
 
 <section class="page-shell page-section mock-page">
 	<nav class="admin-nav"><a href="/admin/users"><i class="pi pi-users"></i>Users</a><a href="/admin/competition"><i class="pi pi-sliders-h"></i>Competition</a><a class="active" href="/admin/mock-clients"><i class="pi pi-desktop"></i>Mock clients</a></nav>
-	<form method="POST" action="?/create" class="surface create">
+	<form onsubmit={createMatch} class="surface create">
 		<div><p class="eyebrow">New private run</p><h2>Create mock match</h2></div>
 		<label>Red platform ID<input name="redPlatformId" required inputmode="numeric" /></label>
 		<label>Blue platform ID<input name="bluePlatformId" required inputmode="numeric" /></label>
 		<label>Queue<select name="queueGuid" required>{#each data.queues as queue}<option value={queue.guid}>{queue.name}</option>{/each}</select></label>
-		<Button type="submit"><i class="pi pi-play"></i>Start</Button>
+		<Button type="submit" disabled={submitting}><i class="pi pi-play"></i>Start</Button>
 	</form>
-	{#if form?.message}<p class:success={form.success} class="notice">{form.message}</p>{/if}
+	{#if notice}<p class:success={notice.success} class="notice">{notice.message}</p>{/if}
 
 	<div class="matches">
 		{#each matches as match (match.guid)}
@@ -72,13 +115,13 @@
 						<section class="client" class:offline={!client.connected}>
 							<div class="identity"><span class={player?.role}>{player?.role}</span><div><strong>{client.impersonatedUser?.username}</strong><small class="numeric">{client.impersonatedUser?.platformId}</small></div><b class="numeric">{player?.health.toFixed(3)} HP</b></div>
 							{#if match.status === "awaiting_discards"}
-								<form method="POST" action="?/act" class="action"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="discard"/><div class="cards">{#each hand(match, client)?.maps?.filter((card) => card.active) ?? [] as card}<label><input type="checkbox" name="mapGuids" value={card.mapGuid}/><span>{card.map?.name}</span></label>{/each}</div><Button type="submit" size="small">Submit discards</Button></form>
+								<form onsubmit={act} class="action"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="discard"/><div class="cards">{#each hand(match, client)?.maps?.filter((card) => card.active) ?? [] as card}<label><input type="checkbox" name="mapGuids" value={card.mapGuid}/><span>{card.map?.name}</span></label>{/each}</div><Button type="submit" size="small" disabled={submitting}>Submit discards</Button></form>
 							{:else if match.status === "awaiting_pick" && ((match.currentRound + 1) % 2 === 1 ? player?.role === "red" : player?.role === "blue")}
-								<div class="cards picks">{#each hand(match, client)?.maps?.filter((card) => card.active) ?? [] as card}<form method="POST" action="?/act"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="pick"/><input type="hidden" name="mapGuid" value={card.mapGuid}/><button>{card.map?.name}<small>{card.map?.difficulty} · {card.map?.modifiers.join(" + ")}</small></button></form>{/each}</div>
+								<div class="cards picks">{#each hand(match, client)?.maps?.filter((card) => card.active) ?? [] as card}<form onsubmit={act}><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="pick"/><input type="hidden" name="mapGuid" value={card.mapGuid}/><button disabled={submitting}>{card.map?.name}<small>{card.map?.difficulty} · {card.map?.modifiers.join(" + ")}</small></button></form>{/each}</div>
 							{:else if match.status === "awaiting_scores" && currentRound(match)}
-								<form method="POST" action="?/act" class="score-form"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="score"/><input type="hidden" name="roundGuid" value={currentRound(match)?.guid}/><label>Raw score<input type="number" min="0" max={currentRound(match)?.map?.maxScore} name="rawScore" value={Math.floor((currentRound(match)?.map?.maxScore ?? 0) * .9)} required/></label><label>Displayed score<input type="number" min="0" name="modifiedScore" value={Math.floor((currentRound(match)?.map?.maxScore ?? 0) * .9)} required/></label><label>Misses<input type="number" min="0" name="missCount" value="0" required/></label><label class="check"><input type="checkbox" name="fullCombo" checked/>FC</label><Button type="submit" size="small">Submit score</Button></form>
+								<form onsubmit={act} class="score-form"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="score"/><input type="hidden" name="roundGuid" value={currentRound(match)?.guid}/><label>Raw score<input type="number" min="0" max={currentRound(match)?.map?.maxScore} name="rawScore" value={Math.floor((currentRound(match)?.map?.maxScore ?? 0) * .9)} required/></label><label>Displayed score<input type="number" min="0" name="modifiedScore" value={Math.floor((currentRound(match)?.map?.maxScore ?? 0) * .9)} required/></label><label>Misses<input type="number" min="0" name="missCount" value="0" required/></label><label class="check"><input type="checkbox" name="fullCombo" checked/>FC</label><Button type="submit" size="small" disabled={submitting}>Submit score</Button></form>
 							{:else}<p class="waiting">Waiting for the other client or server timer.</p>{/if}
-							{#if !["countdown", "playing", "awaiting_scores", "completed", "aborted"].includes(match.status)}<div class="danger-actions"><form method="POST" action="?/act"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="forfeit"/><button><i class="pi pi-flag"></i>Forfeit</button></form><form method="POST" action="?/act"><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="disconnect"/><button><i class="pi pi-power-off"></i>Crash client</button></form></div>{/if}
+							{#if !["countdown", "playing", "awaiting_scores", "completed", "aborted"].includes(match.status)}<div class="danger-actions"><form onsubmit={act}><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="forfeit"/><button disabled={submitting}><i class="pi pi-flag"></i>Forfeit</button></form><form onsubmit={act}><input type="hidden" name="clientGuid" value={client.guid}/><input type="hidden" name="actionName" value="disconnect"/><button disabled={submitting}><i class="pi pi-power-off"></i>Crash client</button></form></div>{/if}
 						</section>
 					{/each}
 				</div>

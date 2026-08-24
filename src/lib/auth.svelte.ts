@@ -1,6 +1,7 @@
 import { browser } from "$app/environment";
 import { goto } from "$app/navigation";
 import { page } from "$app/state";
+import { createApiClient } from "$lib/api";
 import { getContext, setContext } from "svelte";
 import type { User } from "compcube-client";
 
@@ -32,7 +33,8 @@ export function initAuth(
 	async function logout() {
 		if (!browser) return;
 		try {
-			await fetch("/auth/logout", { method: "POST" });
+			const response = await createApiClient(fetch, token).auth.logout();
+			if (!response.ok) throw new Error("The logout request was rejected.");
 		} catch {
 			error =
 				"The logout request failed. Your local session has still been cleared.";

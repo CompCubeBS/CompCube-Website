@@ -1,8 +1,61 @@
 <script lang="ts">
+	import { invalidateAll } from "$app/navigation";
+	import { createApiClient } from "$lib/api";
+	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageHeader from "$lib/components/PageHeader.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
-	let { data, form } = $props();
+	import type { PlayerOneDecision } from "compcube-client";
+	let { data } = $props();
+	const auth = useAuth();
+	let notice = $state<{ success: boolean; message: string } | null>(null);
+	let submitting = $state(false);
+
+	async function runMutation(request: () => Promise<Response>, success: string) {
+		submitting = true;
+		try {
+			const response = await request();
+			if (!response.ok) throw new Error("The API rejected this change.");
+			notice = { success: true, message: success };
+			await invalidateAll();
+		} catch (error) {
+			notice = { success: false, message: error instanceof Error ? error.message : "The API rejected this change." };
+		} finally {
+			submitting = false;
+		}
+	}
+	function values(event: SubmitEvent) {
+		event.preventDefault();
+		return new FormData(event.currentTarget as HTMLFormElement);
+	}
+	async function createSeason(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).seasons.create({ id: String(form.get("id")), name: String(form.get("name")), description: String(form.get("description") ?? "") || null, startingMmr: Number(form.get("startingMmr")), startsAt: new Date(String(form.get("startsAt"))).toISOString(), endsAt: form.get("endsAt") ? new Date(String(form.get("endsAt"))).toISOString() : null, isCurrent: form.get("isCurrent") === "on" }), "Season created.");
+	}
+	async function updateSeason(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).seasons.update({ seasonGuid: String(form.get("seasonGuid")), startingMmr: Number(form.get("startingMmr")), isCurrent: form.get("isCurrent") === "on" }), "Season updated.");
+	}
+	async function createPool(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).pools.create({ seasonGuid: String(form.get("seasonGuid")), name: String(form.get("name")), imageUrl: String(form.get("imageUrl") ?? "") || null, isPublic: form.get("isPublic") === "on" }), "Map pool created.");
+	}
+	async function publishPool(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).pools.publish({ poolGuid: String(form.get("poolGuid")), isPublic: form.get("isPublic") === "on" }), "Pool visibility updated.");
+	}
+	async function createQueue(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).queues.create({ slug: String(form.get("slug")), name: String(form.get("name")), poolGuid: String(form.get("poolGuid")), minMmr: Number(form.get("minMmr")), maxMmr: Number(form.get("maxMmr")), startingHealth: Number(form.get("startingHealth")), kFactor: Number(form.get("kFactor")), playerOneDecision: String(form.get("playerOneDecision")) as PlayerOneDecision, competitive: form.get("competitive") === "on", enabled: true }), "Queue created.");
+	}
+	async function toggleQueue(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).queues.update({ queueGuid: String(form.get("queueGuid")), enabled: form.get("enabled") === "on" }), "Queue updated.");
+	}
+	async function createFlair(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).flairs.create({ name: String(form.get("name")), color: String(form.get("color") ?? "") || null, imageUrl: String(form.get("imageUrl") ?? "") || null }), "Flair created.");
+	}
 </script>
 
 <PageMeta
@@ -20,8 +73,8 @@
 			><i class="pi pi-sliders-h"></i>Competition</a
 		><a href="/admin/mock-clients"><i class="pi pi-desktop"></i>Mock clients</a><a href="/maps"><i class="pi pi-map"></i>Pool maps</a>
 	</div>
-	{#if form?.message}<p class="notice" class:success={form.success}>
-			{form.message}
+	{#if notice}<p class="notice" class:success={notice.success}>
+			{notice.message}
 		</p>{/if}
 	<div class="grid">
 		<article class="surface">
@@ -35,8 +88,7 @@
 				</div>
 			</header>
 			{#each data.seasons as season}<form
-					method="POST"
-					action="?/updateSeason"
+					onsubmit={updateSeason}
 					class="row">
 					<input
 						type="hidden"
@@ -59,10 +111,10 @@
 							type="checkbox"
 							name="isCurrent"
 							checked={season.isCurrent} />Current</label
-					><Button type="submit" size="small" variant="secondary"
+					><Button type="submit" size="small" variant="secondary" disabled={submitting}
 						>Save</Button>
 				</form>{/each}
-			<form method="POST" action="?/createSeason" class="create">
+			<form onsubmit={createSeason} class="create">
 				<h3>New season</h3>
 				<label>ID<input name="id" required /></label><label
 					>Name<input name="name" required /></label
@@ -82,7 +134,7 @@
 					><input type="checkbox" name="isCurrent" />Current</label
 				><label class="wide"
 					>Description<input name="description" /></label
-				><Button type="submit"><i class="pi pi-plus"></i>Create</Button>
+				><Button type="submit" disabled={submitting}><i class="pi pi-plus"></i>Create</Button>
 			</form>
 		</article>
 
@@ -97,8 +149,7 @@
 				</div>
 			</header>
 			{#each data.pools as pool}<form
-					method="POST"
-					action="?/publishPool"
+					onsubmit={publishPool}
 					class="row">
 					<input type="hidden" name="poolGuid" value={pool.guid} />
 					<div>
@@ -112,11 +163,10 @@
 							checked={pool.isPublic} />Published</label
 					><a class="manage" href={`/maps?pool=${pool.guid}`}
 						>Manage maps<i class="pi pi-arrow-right"></i></a
-					><Button type="submit" size="small" variant="secondary"
+					><Button type="submit" size="small" variant="secondary" disabled={submitting}
 						>Save</Button>
 				</form>{/each}{#if data.current}<form
-					method="POST"
-					action="?/createPool"
+					onsubmit={createPool}
 					class="create">
 					<input
 						type="hidden"
@@ -129,7 +179,7 @@
 						><input
 							type="checkbox"
 							name="isPublic" />Published</label
-					><Button type="submit"
+					><Button type="submit" disabled={submitting}
 						><i class="pi pi-plus"></i>Create</Button>
 				</form>{/if}
 		</article>
@@ -146,8 +196,7 @@
 				</div>
 			</header>
 			{#each data.queues as queue}<form
-					method="POST"
-					action="?/toggleQueue"
+					onsubmit={toggleQueue}
 					class="row">
 					<input type="hidden" name="queueGuid" value={queue.guid} />
 					<div>
@@ -161,10 +210,10 @@
 							name="enabled"
 							checked={queue.enabled} />Enabled</label
 					><span>{queue.playerOneDecision.replaceAll("_", " ")}</span
-					><Button type="submit" size="small" variant="secondary"
+					><Button type="submit" size="small" variant="secondary" disabled={submitting}
 						>Save</Button>
 				</form>{/each}
-			<form method="POST" action="?/createQueue" class="create">
+			<form onsubmit={createQueue} class="create">
 				<h3>New queue</h3>
 				<label>Slug<input name="slug" required /></label><label
 					>Name<input name="name" required /></label
@@ -206,7 +255,7 @@
 						type="checkbox"
 						name="competitive"
 						checked />Competitive</label
-				><Button type="submit"><i class="pi pi-plus"></i>Create</Button>
+				><Button type="submit" disabled={submitting}><i class="pi pi-plus"></i>Create</Button>
 			</form>
 		</article>
 
@@ -224,7 +273,7 @@
 						>{flair.name}</span
 					>{/each}
 			</div>
-			<form method="POST" action="?/createFlair" class="create">
+			<form onsubmit={createFlair} class="create">
 				<h3>New flair</h3>
 				<label>Name<input name="name" required /></label><label
 					>Colour<input
@@ -232,7 +281,7 @@
 						type="color"
 						value="#a878ff" /></label
 				><label>Image URL<input name="imageUrl" /></label><Button
-					type="submit"><i class="pi pi-plus"></i>Create</Button>
+					type="submit" disabled={submitting}><i class="pi pi-plus"></i>Create</Button>
 			</form>
 		</article>
 	</div>

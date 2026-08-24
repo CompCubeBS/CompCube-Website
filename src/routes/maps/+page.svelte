@@ -1,14 +1,46 @@
 <script lang="ts">
+	import { invalidateAll } from "$app/navigation";
 	import Button from "$lib/components/Button.svelte";
 	import { env } from "$env/dynamic/public";
+	import { createApiClient } from "$lib/api";
+	import { useAuth } from "$lib/auth.svelte";
 	import PageHeader from "$lib/components/PageHeader.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
-	let { data, form } = $props();
+	import type { Difficulty, MapModifier } from "compcube-client";
+	let { data } = $props();
+	const auth = useAuth();
+	let notice = $state<{ success: boolean; message: string } | null>(null);
+	let submitting = $state(false);
 	const playlistUrl = $derived(
 		`${(env.PUBLIC_COMPCUBE_API_URL || "https://api.compcube.net").replace(/\/$/, "")}/maps/playlist`,
 	);
 	function duration(seconds: number) {
 		return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+	}
+	async function runMutation(request: () => Promise<Response>, success: string, failure: string) {
+		submitting = true;
+		try {
+			const response = await request();
+			if (!response.ok) throw new Error(failure);
+			notice = { success: true, message: success };
+			await invalidateAll();
+		} catch (error) {
+			notice = { success: false, message: error instanceof Error ? error.message : failure };
+		} finally {
+			submitting = false;
+		}
+	}
+	async function addMap(event: SubmitEvent) {
+		event.preventDefault();
+		const form = new FormData(event.currentTarget as HTMLFormElement);
+		await runMutation(() => createApiClient(fetch, auth.token).maps.create({
+			poolGuid: String(form.get("poolGuid") ?? ""),
+			key: String(form.get("key") ?? "").trim(),
+			characteristic: String(form.get("characteristic") ?? "Standard").trim(),
+			difficulty: String(form.get("difficulty") ?? "") as Difficulty,
+			modifiers: form.getAll("modifiers").map(String) as MapModifier[],
+			flairGuid: String(form.get("flairGuid") ?? "") || null,
+		}), "Map added from BeatSaver.", "BeatSaver rejected the map or difficulty.");
 	}
 </script>
 
@@ -35,11 +67,11 @@
 				><i class="pi pi-download"></i>BPList</Button
 			>{/if}
 	</div>
-	{#if form?.message}<p class:success={form.success} class="notice">
-			{form.message}
+	{#if notice}<p class:success={notice.success} class="notice">
+			{notice.message}
 		</p>{/if}
 	{#if data.canManage && data.selectedPool}
-		<form method="POST" action="?/add" class="admin-form surface">
+		<form onsubmit={addMap} class="admin-form surface">
 			<input
 				type="hidden"
 				name="poolGuid"
@@ -79,7 +111,7 @@
 							value={modifier} />{modifier}</label
 					>{/each}
 			</fieldset>
-			<Button type="submit"
+			<Button type="submit" disabled={submitting}
 				><i class="pi pi-plus"></i>Add from BeatSaver</Button>
 		</form>
 	{/if}
@@ -128,11 +160,8 @@
 						rel="noreferrer"
 						aria-label="Open on BeatSaver"
 						><i class="pi pi-external-link"></i></a
-					>{#if data.canManage}<form method="POST" action="?/remove">
-							<input
-								type="hidden"
-								name="mapGuid"
-								value={map.guid} /><button
+					>{#if data.canManage}<form onsubmit={(event) => { event.preventDefault(); void runMutation(() => createApiClient(fetch, auth.token).maps.remove({ mapGuid: map.guid }), "Map removed.", "The map could not be removed."); }}>
+							<button disabled={submitting}
 								aria-label="Remove map"
 								><i class="pi pi-trash"></i></button>
 						</form>{/if}

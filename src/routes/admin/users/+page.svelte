@@ -1,11 +1,17 @@
 <script lang="ts">
+	import { invalidateAll } from "$app/navigation";
+	import { createApiClient } from "$lib/api";
+	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageHeader from "$lib/components/PageHeader.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
 	import type { Permission, User } from "compcube-client";
-	let { data, form } = $props();
+	let { data } = $props();
+	const auth = useAuth();
 	let search = $state("");
 	let expanded = $state<string | null>(null);
+	let notice = $state<{ success: boolean; message: string } | null>(null);
+	let submitting = $state(false);
 	const permissions: Permission[] = [
 		"role:admin",
 		"role:dev",
@@ -22,6 +28,53 @@
 				.includes(search.toLowerCase()),
 		),
 	);
+
+	async function runMutation(request: () => Promise<Response>, success: string, failure: string) {
+		submitting = true;
+		try {
+			const response = await request();
+			if (!response.ok) throw new Error(failure);
+			notice = { success: true, message: success };
+			await invalidateAll();
+		} catch (error) {
+			notice = { success: false, message: error instanceof Error ? error.message : failure };
+		} finally {
+			submitting = false;
+		}
+	}
+
+	async function updateUser(event: SubmitEvent) {
+		event.preventDefault();
+		const form = new FormData(event.currentTarget as HTMLFormElement);
+		const selected = form.getAll("permissions").map(String).filter((permission): permission is Permission => permissions.includes(permission as Permission));
+		await runMutation(() => createApiClient(fetch, auth.token).users.update({
+			userGuid: String(form.get("userGuid") ?? ""),
+			username: String(form.get("username") ?? "").trim(),
+			avatarUrl: String(form.get("avatarUrl") ?? "").trim() || null,
+			beatKhanaGuid: String(form.get("beatKhanaGuid") ?? "").trim() || null,
+			discordId: String(form.get("discordId") ?? "").trim() || null,
+			platformId: String(form.get("platformId") ?? "").trim() || null,
+			banned: form.get("banned") === "on",
+			permissions: selected.length ? selected : ["role:player"],
+		}), "Account updated.", "The user could not be updated.");
+	}
+
+	async function updateMmr(event: SubmitEvent) {
+		event.preventDefault();
+		const form = new FormData(event.currentTarget as HTMLFormElement);
+		const currentMmr = Number(form.get("currentMmr"));
+		const startingMmr = Number(form.get("startingMmr"));
+		if (!Number.isInteger(currentMmr) || currentMmr < 0 || !Number.isInteger(startingMmr) || startingMmr < 0) {
+			notice = { success: false, message: "MMR values must be non-negative integers." };
+			return;
+		}
+		await runMutation(() => createApiClient(fetch, auth.token).statistics.update({
+			seasonGuid: String(form.get("seasonGuid") ?? ""),
+			userGuid: String(form.get("userGuid") ?? ""),
+			currentMmr,
+			startingMmr,
+		}), "Rating updated.", "The rating could not be updated.");
+	}
 </script>
 
 <PageMeta
@@ -45,8 +98,8 @@
 		><i class="pi pi-search"></i><input
 			bind:value={search}
 			placeholder="Search username, Discord ID or platform ID" /></label>
-	{#if form?.message}<p class="notice" class:success={form.success}>
-			{form.message}
+	{#if notice}<p class="notice" class:success={notice.success}>
+			{notice.message}
 		</p>{/if}
 	<div class="users">
 		{#each visible as user (user.guid)}{@const stats =
@@ -81,7 +134,7 @@
 					></i>
 				</button>
 				{#if expanded === user.guid}<div class="editor">
-						<form method="POST" action="?/update">
+						<form onsubmit={updateUser}>
 							<input
 								type="hidden"
 								name="userGuid"
@@ -130,12 +183,11 @@
 										>Banned from CompCube</span
 									></label>
 							</fieldset>
-							<Button type="submit"
+							<Button type="submit" disabled={submitting}
 								><i class="pi pi-save"></i>Save account</Button>
 						</form>
 						{#if data.season && stats}<form
-								method="POST"
-								action="?/mmr"
+								onsubmit={updateMmr}
 								class="rating">
 								<input
 									type="hidden"
@@ -160,7 +212,7 @@
 										min="0"
 										name="currentMmr"
 										value={stats.currentMmr} /></label
-								><Button type="submit" variant="secondary"
+								><Button type="submit" variant="secondary" disabled={submitting}
 									><i class="pi pi-chart-line"></i>Update MMR</Button>
 							</form>{/if}
 					</div>{/if}

@@ -4,14 +4,18 @@
 	import { env } from "$env/dynamic/public";
 	import NumberFlow from "@number-flow/svelte";
 	import { createApiClient } from "$lib/api";
+	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
 	import type { MatchParticipant } from "compcube-client";
 	import { onMount } from "svelte";
-	let { data, form } = $props();
+	let { data } = $props();
+	const auth = useAuth();
 	let connected = $state(false);
 	let now = $state(Date.now());
 	let liveMessage = $state("Connecting to live match…");
+	let notice = $state<{ success: boolean; message: string } | null>(null);
+	let submitting = $state(false);
 	const competitors = $derived(
 		data.match.participants?.filter(
 			(participant) => participant.role !== "spectator",
@@ -57,11 +61,44 @@
 		url.searchParams.set("autoplay", "true");
 		return url.toString();
 	}
+	async function runMutation(request: () => Promise<Response>, success: string) {
+		submitting = true;
+		try {
+			const response = await request();
+			if (!response.ok) throw new Error("The match action was rejected.");
+			notice = { success: true, message: success };
+			await invalidateAll();
+		} catch (error) {
+			notice = { success: false, message: error instanceof Error ? error.message : "The match action was rejected." };
+		} finally {
+			submitting = false;
+		}
+	}
+	function values(event: SubmitEvent) {
+		event.preventDefault();
+		return new FormData(event.currentTarget as HTMLFormElement);
+	}
+	async function abortMatch(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).moderation.abort({ matchGuid: data.match.guid, reason: String(form.get("reason") ?? "").trim() }), "Match cancelled.");
+	}
+	async function setHealth(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).moderation.decision({ matchGuid: data.match.guid, action: "set_health", targetUserGuid: String(form.get("userGuid") ?? ""), health: Number(form.get("health")), reason: "Administrative health correction" }), "Health corrected.");
+	}
+	async function adjustMmr(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).moderation.adjustResult({ matchGuid: data.match.guid, winnerMmrGain: Number(form.get("winnerMmrGain")), loserMmrLoss: Number(form.get("loserMmrLoss")) }), "Final MMR changes corrected.");
+	}
+	async function declareWinner(event: SubmitEvent) {
+		const form = values(event);
+		await runMutation(() => createApiClient(fetch, auth.token).moderation.decision({ matchGuid: data.match.guid, action: "declare_winner", winnerUserGuid: String(form.get("winnerUserGuid") ?? ""), winnerMmrGain: Number(form.get("winnerMmrGain")), loserMmrLoss: Number(form.get("loserMmrLoss")), reason: String(form.get("reason") ?? "").trim() }), "Winner and final MMR changes applied.");
+	}
 
 	onMount(() => {
 		if (!browser) return;
 		const clock = setInterval(() => (now = Date.now()), 100);
-		const socket = createApiClient(fetch, data.authToken).socket;
+		const socket = createApiClient(fetch, auth.token).socket;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const refresh = () => {
 			clearTimeout(timer);
@@ -194,26 +231,23 @@
 	{#if data.canModerate}<article class="surface admin">
 			<p class="eyebrow">Match control</p>
 			<div class="admin-actions">
-				{#if data.match.status === "paused"}<form
-						method="POST"
-						action="?/resume">
-						<Button type="submit"
+				{#if data.match.status === "paused"}<form onsubmit={(event) => { event.preventDefault(); void runMutation(() => createApiClient(fetch, auth.token).moderation.resume({ matchGuid: data.match.guid }), "Match resumed."); }}>
+						<Button type="submit" disabled={submitting}
 							><i class="pi pi-play"></i>Resume</Button>
-					</form>{:else}<form method="POST" action="?/pause">
-						<Button type="submit" variant="secondary"
+					</form>{:else}<form onsubmit={(event) => { event.preventDefault(); void runMutation(() => createApiClient(fetch, auth.token).moderation.pause({ matchGuid: data.match.guid }), "Match paused."); }}>
+						<Button type="submit" variant="secondary" disabled={submitting}
 							><i class="pi pi-pause"></i>Pause</Button>
 					</form>{/if}
-				<form method="POST" action="?/abort">
+				<form onsubmit={abortMatch}>
 					<input
 						name="reason"
 						placeholder="Cancellation reason"
-						required /><Button type="submit" variant="danger"
+						required /><Button type="submit" variant="danger" disabled={submitting}
 						><i class="pi pi-times"></i>Cancel</Button>
 				</form>
 			</div>
 			{#each competitors as participant}<form
-					method="POST"
-					action="?/setHealth"
+					onsubmit={setHealth}
 					class="inline-form">
 					<input
 						type="hidden"
@@ -225,14 +259,14 @@
 							min="0"
 							name="health"
 							value={participant.health} /></label
-					><Button type="submit" size="small" variant="secondary"
+					><Button type="submit" size="small" variant="secondary" disabled={submitting}
 						>Set</Button>
 				</form>{/each}
 		</article>{/if}
 	{#if data.isAdmin && data.match.status === "completed" && data.match.winnerUserGuid}<article
 			class="surface admin">
 			<p class="eyebrow">Final rating correction</p>
-			<form method="POST" action="?/adjustMmr" class="inline-form">
+			<form onsubmit={adjustMmr} class="inline-form">
 				<label
 					>Winner gain<input
 						type="number"
@@ -245,25 +279,25 @@
 						min="0"
 						name="loserMmrLoss"
 						value={data.match.loserMmrLoss ?? 0} /></label
-				><Button type="submit" size="small">Apply</Button>
+				><Button type="submit" size="small" disabled={submitting}>Apply</Button>
 			</form>
-			<form method="POST" action="?/undo">
-				<Button type="submit" variant="danger" size="small"
+			<form onsubmit={(event) => { event.preventDefault(); void runMutation(() => createApiClient(fetch, auth.token).moderation.undoResult({ matchGuid: data.match.guid }), "Match result reverted."); }}>
+				<Button type="submit" variant="danger" size="small" disabled={submitting}
 					><i class="pi pi-replay"></i>Revert result</Button>
 			</form>
 		</article>{/if}
 	{#if data.isAdmin && !["completed", "aborted"].includes(data.match.status)}<article class="surface admin">
 		<p class="eyebrow">Declare final result</p>
-		<form method="POST" action="?/declareWinner" class="winner-form">
+		<form onsubmit={declareWinner} class="winner-form">
 			<label>Winner<select name="winnerUserGuid" required>{#each competitors as participant}<option value={participant.userGuid}>{name(participant)}</option>{/each}</select></label>
 			<label>Winner gain<input type="number" min="0" name="winnerMmrGain" value="50" /></label>
 			<label>Loser loss<input type="number" min="0" name="loserMmrLoss" value="50" /></label>
 			<label class="reason">Reason<input name="reason" required placeholder="Administrative final decision" /></label>
-			<Button type="submit" variant="danger"><i class="pi pi-gavel"></i>End match</Button>
+			<Button type="submit" variant="danger" disabled={submitting}><i class="pi pi-gavel"></i>End match</Button>
 		</form>
 	</article>{/if}
-	{#if form?.message}<p class="notice" class:success={form.success}>
-			{form.message}
+	{#if notice}<p class="notice" class:success={notice.success}>
+			{notice.message}
 		</p>{/if}
 </section>
 
