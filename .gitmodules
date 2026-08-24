@@ -1,0 +1,3 @@
+[submodule "CompCube-Client"]
+	path = CompCube-Client
+	url = https://github.com/CompCubeBS/CompCube-Client.git
