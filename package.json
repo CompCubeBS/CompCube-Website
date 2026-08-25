@@ -5,7 +5,7 @@
 	"type": "module",
 	"dependencies": {
 		"@number-flow/svelte": "^0.4.2",
-		"compcube-client": "file:../CompCube-Client",
+		"compcube-client": "file:./CompCube-Client",
 		"primeicons": "^7.0.0"
 	},
 	"scripts": {
