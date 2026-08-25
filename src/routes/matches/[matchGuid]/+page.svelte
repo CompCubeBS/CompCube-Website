@@ -7,7 +7,7 @@
 	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
-	import type { MatchParticipant } from "compcube-client";
+	import type { MatchAuditEvent, MatchParticipant } from "compcube-client";
 	import { onMount } from "svelte";
 	let { data } = $props();
 	const auth = useAuth();
@@ -42,6 +42,11 @@
 				new Date(b.createdAt).getTime(),
 		),
 	);
+	const auditEvents = $derived(
+		[...(data.match.auditEvents ?? [])].sort(
+			(a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+		),
+	);
 	const activeTimer = $derived(data.match.timers?.filter((timer) => ["scheduled", "processing", "paused"].includes(timer.status)).sort((a, b) => new Date(a.dueAt).getTime() - new Date(b.dueAt).getTime())[0]);
 	const remainingSeconds = $derived(activeTimer ? activeTimer.status === "paused" ? Math.max(0, Math.ceil((activeTimer.pausedRemainingMs ?? 0) / 1000)) : Math.max(0, Math.ceil((new Date(activeTimer.dueAt).getTime() - now) / 1000)) : 0);
 	function name(participant?: MatchParticipant) {
@@ -52,6 +57,42 @@
 	}
 	function mapName(map: { name?: string } | null | undefined) {
 		return map?.name ?? "Unknown map";
+	}
+	function eventMapGuids(event: MatchAuditEvent): string[] {
+		const value = event.metadata.mapGuids;
+		if (Array.isArray(value)) return value.filter((guid): guid is string => typeof guid === "string");
+		return typeof event.metadata.mapGuid === "string" ? [event.metadata.mapGuid] : [];
+	}
+	function eventMapNames(event: MatchAuditEvent) {
+		return eventMapGuids(event).map((guid) => actions.find((action) => action.mapGuid === guid)?.map?.name ?? "Unknown map");
+	}
+	function eventText(event: MatchAuditEvent) {
+		const player = event.user?.username ?? "Player";
+		const maps = eventMapNames(event);
+		const count = maps.length;
+		switch (event.eventType) {
+			case "initial_hand_dealt": return `CompCube dealt ${player} an initial hand (${count} maps)`;
+			case "discards_submitted":
+				if (event.timerExpired) return `Discard timer expired — CompCube kept ${player}'s hand`;
+				return count ? `${player} discarded ${count} ${count === 1 ? "map" : "maps"}: ${maps.join(", ")}` : `${player} kept the initial hand`;
+			case "replacement_maps_dealt": return `CompCube dealt ${count} replacement ${count === 1 ? "map" : "maps"} to ${player}: ${maps.join(", ")}`;
+			case "map_picked":
+				return event.timerExpired ? `Pick timer expired — CompCube selected ${maps[0] ?? "a map"} for ${player}` : `${player} picked ${maps[0] ?? "a map"}`;
+			case "score_submitted": return `${event.source === "server" ? "CompCube submitted" : `${player} submitted`} the round ${String(event.metadata.roundNumber ?? "")} score${event.source === "server" ? ` for ${player}` : ""}`;
+			case "score_defaulted": return `Score timer expired — CompCube recorded a timeout score for ${player}`;
+		}
+	}
+	function eventTitle(event: MatchAuditEvent) {
+		const timing = event.elapsedMs === null ? "" : ` after ${(event.elapsedMs / 1000).toFixed(1)}s`;
+		const remaining = event.remainingMs === null ? "" : ` with ${(event.remainingMs / 1000).toFixed(1)}s remaining`;
+		if (event.timerExpired) return `Timer expired${timing}. CompCube performed this server action; it was not submitted by the player.`;
+		return `${event.source === "server" ? "Server action" : "Player action"}${timing}${remaining}.`;
+	}
+	function eventIcon(event: MatchAuditEvent) {
+		if (event.timerExpired) return "pi-clock";
+		if (event.eventType === "discards_submitted") return "pi-times";
+		if (event.eventType === "map_picked" || event.eventType === "score_submitted") return "pi-check";
+		return "pi-clone";
 	}
 	function replayUrl(platformId: string) {
 		const url = new URL(env.PUBLIC_REPLAY_VIEWER_URL || "https://view.replay.beatkhana.com");
@@ -365,7 +406,7 @@
 	<div class="section-title">
 		<div>
 			<p class="eyebrow">Draft record</p>
-			<h2>Hands, discards & picks</h2>
+			<h2>Hands & match activity</h2>
 		</div>
 	</div>
 	<div class="hands">
@@ -388,15 +429,13 @@
 			</article>{/each}
 	</div>
 	<ol class="timeline">
-		{#each actions as action}<li>
-				<time>{new Date(action.createdAt).toLocaleTimeString()}</time><i
-					class={`pi ${action.action === "picked" ? "pi-check" : action.action === "discarded" ? "pi-times" : "pi-clone"}`}
-				></i
-				><span
-					><strong>{action.user?.username}</strong>
-					{action.action}
-					{action.map?.name}</span>
-			</li>{/each}
+		{#each auditEvents as event}<li class:server-action={event.source === "server"} title={eventTitle(event)}>
+				<time>{new Date(event.createdAt).toLocaleTimeString()}</time><i class={`pi ${eventIcon(event)}`}></i><span>{eventText(event)} <small>{event.source === "server" ? "SERVER" : "PLAYER"}</small></span>
+			</li>{:else}
+			{#each [...new Map(actions.map((action) => [`${action.createdAt}:${action.userGuid}:${action.action}`, action])).values()] as action}<li>
+					<time>{new Date(action.createdAt).toLocaleTimeString()}</time><i class={`pi ${action.action === "picked" ? "pi-check" : action.action === "discarded" ? "pi-times" : "pi-clone"}`}></i><span><strong>{action.user?.username}</strong> {action.action} maps</span>
+				</li>{/each}
+		{/each}
 	</ol>
 </section>
 
@@ -711,6 +750,15 @@
 	}
 	.timeline i {
 		color: var(--purple);
+	}
+	.timeline li.server-action i {
+		color: var(--warning);
+	}
+	.timeline small {
+		margin-left: 0.45rem;
+		color: var(--text-subtle);
+		font-size: 0.58rem;
+		letter-spacing: 0.08em;
 	}
 	@media (max-width: 760px) {
 		.scoreboard {

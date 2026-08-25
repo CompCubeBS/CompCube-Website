@@ -213,7 +213,7 @@
 										name="currentMmr"
 										value={stats.currentMmr} /></label
 								><Button type="submit" variant="secondary" disabled={submitting}
-									><i class="pi pi-chart-line"></i>Update MMR</Button>
+									><i class="pi pi-arrow-up-right"></i>Update MMR</Button>
 							</form>{/if}
 					</div>{/if}
 			</article>{/each}

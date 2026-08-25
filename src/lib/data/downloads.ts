@@ -1,21 +1,23 @@
 export interface PluginDownload {
-	version: string;
+	gameVersion: string;
+	pluginVersion: string;
 	label: string;
-	file: string;
+	downloadUrl: string;
 	description: string;
+	sha256: string;
+	size: number;
+	uploadedAt: string;
 }
 
-export const pluginDownloads: PluginDownload[] = [
-	{
-		version: "1.40.8",
-		label: "Beat Saber 1.40.8",
-		file: "/downloads/CompCube-1.40.8.dll",
-		description: "Current PCVR release.",
-	},
-	{
-		version: "1.39.1",
-		label: "Beat Saber 1.39.1",
-		file: "/downloads/CompCube-1.39.1.dll",
-		description: "Legacy PCVR release.",
-	},
-];
+export interface PluginReleaseResponse {
+	servedPluginVersion: string | null;
+	releases: Omit<PluginDownload, "label" | "description">[];
+}
+
+export function asPluginDownloads(response: PluginReleaseResponse | null): PluginDownload[] {
+	return (response?.releases ?? []).map((release, index) => ({
+		...release,
+		label: `Beat Saber ${release.gameVersion}`,
+		description: `${index === 0 ? "Current" : "Supported"} CompCube ${release.pluginVersion} build.`,
+	}));
+}

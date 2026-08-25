@@ -46,7 +46,8 @@
 			Select the version matching your PCVR install. The DLL goes directly
 			into your Beat Saber Plugins folder.
 		</p>
-		<DownloadSelector compact />
+		<DownloadSelector compact downloads={data.downloads} />
+		{#if data.servedPluginVersion}<p class="release-version">Serving CompCube {data.servedPluginVersion}</p>{/if}
 	</div>
 </section>
 
@@ -203,6 +204,7 @@
 		color: var(--text-muted);
 		font-size: 0.9rem;
 	}
+	.release-version { margin-top: .8rem; color: var(--text-subtle); font: 700 .7rem var(--font-secondary); text-transform: uppercase; letter-spacing: .06em; }
 	.steps {
 		display: grid;
 		grid-template-columns: repeat(3, 1fr);

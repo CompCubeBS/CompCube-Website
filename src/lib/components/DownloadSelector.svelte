@@ -1,26 +1,35 @@
 <script lang="ts">
 	import Button from "./Button.svelte";
 	import Dropdown from "./Dropdown.svelte";
-	import { pluginDownloads } from "$lib/data/downloads";
+	import type { PluginDownload } from "$lib/data/downloads";
 
-	let { compact = false }: { compact?: boolean } = $props();
-	let version = $state(pluginDownloads[0]?.version ?? "");
+	let { compact = false, downloads }: { compact?: boolean; downloads: PluginDownload[] } = $props();
+	let version = $state("");
+	$effect(() => {
+		if (!downloads.some((download) => download.gameVersion === version)) {
+			version = downloads[0]?.gameVersion ?? "";
+		}
+	});
 	const selected = $derived(
-		pluginDownloads.find((download) => download.version === version),
+		downloads.find((download) => download.gameVersion === version),
 	);
-	const options = pluginDownloads.map((download) => ({
+	const options = $derived(downloads.map((download) => ({
 		label: download.label,
-		value: download.version,
+		value: download.gameVersion,
 		description: download.description,
-	}));
+	})));
 </script>
 
 <div class:compact class="download-selector">
-	<Dropdown label="Game version" bind:value={version} {options} />
-	<Button href={selected?.file ?? "#"} size="large" fullWidth download>
-		<i class="pi pi-download" aria-hidden="true"></i>
-		Download DLL
-	</Button>
+	{#if downloads.length}
+		<Dropdown label="Game version" bind:value={version} {options} />
+		<Button href={selected?.downloadUrl ?? "#"} size="large" fullWidth download>
+			<i class="pi pi-download" aria-hidden="true"></i>
+			Download DLL
+		</Button>
+	{:else}
+		<p class="unavailable">No public plugin build is available yet.</p>
+	{/if}
 </div>
 
 <style>
@@ -33,6 +42,7 @@
 	.download-selector:not(.compact) {
 		max-width: 38rem;
 	}
+	.unavailable { grid-column: 1 / -1; margin: 0; color: var(--warning); }
 	@media (max-width: 540px) {
 		.download-selector {
 			grid-template-columns: 1fr;

@@ -20,9 +20,11 @@
 			The files are served directly from CompCube. Select the exact
 			version matching your Beat Saber installation.
 		</p>
-		<DownloadSelector />
+		<DownloadSelector downloads={data.downloads} />
 		<div class="supported">
-			<span>Currently supported plugin versions</span>
+			<span>Server release</span>
+			{#if data.servedPluginVersion}<strong>CompCube {data.servedPluginVersion}</strong>{:else}<strong>No release published</strong>{/if}
+			<span>Accepted plugin versions</span>
 			{#if data.supportedPluginVersions.length}<div>{#each data.supportedPluginVersions as version}<code>{version}</code>{/each}</div>{:else}<strong>Development builds are currently accepted</strong>{/if}
 		</div>
 	</div>

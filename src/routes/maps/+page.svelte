@@ -39,7 +39,7 @@
 			characteristic: String(form.get("characteristic") ?? "Standard").trim(),
 			difficulty: String(form.get("difficulty") ?? "") as Difficulty,
 			modifiers: form.getAll("modifiers").map(String) as MapModifier[],
-			flairGuid: String(form.get("flairGuid") ?? "") || null,
+			categoryGuid: String(form.get("categoryGuid") ?? "") || null,
 		}), "Map added from BeatSaver.", "BeatSaver rejected the map or difficulty.");
 	}
 </script>
@@ -50,7 +50,7 @@
 	path="/maps" />
 <PageHeader
 	title="Map pools"
-	description="Browse every chart, modifier, category, and published seasonal pool." />
+	description="Browse every map, modifier, category, and published seasonal pool." />
 
 <section class="page-shell page-section map-page">
 	<div class="toolbar">
@@ -96,10 +96,10 @@
 						>{/each}</select
 				></label>
 			<label
-				>Flair<select name="flairGuid"
+				>Map category<select name="categoryGuid"
 					><option value="">None</option
-					>{#each data.flairs as flair}<option value={flair.guid}
-							>{flair.name}</option
+					>{#each data.categories as category}<option value={category.guid}
+							>{category.name}</option
 						>{/each}</select
 				></label>
 			<fieldset>
@@ -117,7 +117,7 @@
 	{/if}
 	<div class="summary">
 		<span>{data.selectedPool?.name ?? "No active pool"}</span><strong
-			class="numeric">{data.maps.length} charts</strong>
+			class="numeric">{data.maps.length} maps</strong>
 	</div>
 	<div class="map-grid">
 		{#each data.maps as map, index (map.guid)}
@@ -131,7 +131,7 @@
 				<div class="details">
 					<div>
 						<p class="eyebrow">
-							{map.flair?.name ?? "Uncategorised"}
+							{map.category?.name ?? "Uncategorised"}
 						</p>
 						<h2>{map.name}</h2>
 					</div>

@@ -1,0 +1,17 @@
+services:
+  website:
+    build:
+      context: .
+      target: development
+    restart: "no"
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+    volumes:
+      - .:/workspace/CompCube-Website
+      - website-node-modules:/workspace/CompCube-Website/node_modules
+      - client-node-modules:/workspace/CompCube-Website/CompCube-Client/node_modules
+    stdin_open: true
+    tty: true
+
+volumes:
+  website-node-modules:
+  client-node-modules:

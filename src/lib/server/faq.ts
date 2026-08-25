@@ -28,7 +28,7 @@ export const faqItems: FaqItem[] = [
 	{
 		question: "What does MMR represent?",
 		answer: "MMR is the rating used to order the leaderboard and find competitive opponents. Match results change it based on the players involved and the final result.",
-		icon: "pi pi-chart-line",
+		icon: "pi pi-arrow-up-right",
 	},
 	{
 		question: "What happens if I disconnect from a match?",

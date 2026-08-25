@@ -21,17 +21,19 @@ npm run dev
 
 Use `npm run check` for Svelte and TypeScript validation and `npm run build` for a production build. Select a production SvelteKit adapter before deploying.
 
+## Plugin downloads
+
+Plugin binaries are not committed to or bundled with the website. Both the home page and download page load the release manifest from the backend's public `/plugin-releases` endpoint and link directly to the backend download route.
+
 ## Static assets
 
 The site expects these files:
 
 - `static/assets/logo.svg`
-- `static/downloads/CompCube-1.39.1.dll`
-- `static/downloads/CompCube-1.40.8.dll`
 - `static/Quattrocento_Sans/QuattrocentoSans-Regular.ttf`
 - `static/Quattrocento_Sans/QuattrocentoSans-Bold.ttf`
 - `static/Noto_Sans/NotoSans-VariableFont_wdth,wght.ttf`
 - `static/Chakra_Petch/ChakraPetch-Regular.ttf`
 - `static/fonts/JetBrainsMono-VariableFont_wght.ttf` (optional until supplied; numeric text has a monospace fallback)
 
-FAQ content lives in `src/lib/server/faq.ts`. Download versions and filenames live in `src/lib/data/downloads.ts`.
+FAQ content lives in `src/lib/server/faq.ts`. Download response types and display mapping live in `src/lib/data/downloads.ts`.

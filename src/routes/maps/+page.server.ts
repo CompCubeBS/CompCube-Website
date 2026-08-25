@@ -14,13 +14,13 @@ export const load: PageServerLoad = async ({ fetch, locals, parent, url }) => {
 	const pools = poolsResponse?.ok ? await poolsResponse.json() : [] as SeasonPool[];
 	const selectedPool = pools.find((pool) => pool.guid === url.searchParams.get("pool")) ?? pools.find((pool) => pool.isPublic) ?? pools[0] ?? null;
 	const mapsResponse = selectedPool ? await client.maps.forPool({ poolGuid: selectedPool.guid }).catch(() => null) : null;
-	const flairsResponse = await client.flairs.list().catch(() => null);
+	const categoriesResponse = await client.mapCategories.list().catch(() => null);
 	return {
 		season,
 		pools,
 		selectedPool,
 		maps: mapsResponse?.ok ? await mapsResponse.json() : [],
-		flairs: flairsResponse?.ok ? await flairsResponse.json() : [],
+		categories: categoriesResponse?.ok ? await categoriesResponse.json() : [],
 		canManage: Boolean(layout.profile?.permissions.some((permission) => ["role:pooler", "role:admin", "role:dev"].includes(permission))),
 		difficulties,
 		modifiers,

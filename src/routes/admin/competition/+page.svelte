@@ -52,15 +52,15 @@
 		const form = values(event);
 		await runMutation(() => createApiClient(fetch, auth.token).queues.update({ queueGuid: String(form.get("queueGuid")), enabled: form.get("enabled") === "on" }), "Queue updated.");
 	}
-	async function createFlair(event: SubmitEvent) {
+	async function createCategory(event: SubmitEvent) {
 		const form = values(event);
-		await runMutation(() => createApiClient(fetch, auth.token).flairs.create({ name: String(form.get("name")), color: String(form.get("color") ?? "") || null, imageUrl: String(form.get("imageUrl") ?? "") || null }), "Flair created.");
+		await runMutation(() => createApiClient(fetch, auth.token).mapCategories.create({ name: String(form.get("name")), color: String(form.get("color") ?? "") || null, imageUrl: String(form.get("imageUrl") ?? "") || null }), "Map category created.");
 	}
 </script>
 
 <PageMeta
 	title="Competition administration"
-	description="Manage seasons, pools, queues and map flairs."
+	description="Manage seasons, pools, queues and map categories."
 	path="/admin/competition" />
 <PageHeader
 	title="Competition administration"
@@ -263,18 +263,18 @@
 			<header>
 				<i class="pi pi-tags"></i>
 				<div>
-					<h2>Flairs</h2>
+					<h2>Map categories</h2>
 					<p>Reusable map categories shown throughout the pool.</p>
 				</div>
 			</header>
-			<div class="flairs">
-				{#each data.flairs as flair}<span
-						style={`--flair:${flair.color ?? "var(--purple)"}`}
-						>{flair.name}</span
+			<div class="categories">
+				{#each data.categories as category}<span
+						style={`--category:${category.color ?? "var(--purple)"}`}
+						>{category.name}</span
 					>{/each}
 			</div>
-			<form onsubmit={createFlair} class="create">
-				<h3>New flair</h3>
+			<form onsubmit={createCategory} class="create">
+				<h3>New map category</h3>
 				<label>Name<input name="name" required /></label><label
 					>Colour<input
 						name="color"
@@ -409,17 +409,17 @@
 	.wide {
 		grid-column: span 2;
 	}
-	.flairs {
+	.categories {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
 		padding-block: 0.5rem;
 	}
-	.flairs span {
+	.categories span {
 		padding: 0.25rem 0.55rem;
-		border: 1px solid var(--flair);
+		border: 1px solid var(--category);
 		border-radius: 99px;
-		color: var(--flair);
+		color: var(--category);
 		font: 600 0.7rem var(--font-secondary);
 	}
 	@media (max-width: 850px) {
