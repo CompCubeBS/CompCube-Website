@@ -4,6 +4,7 @@
 	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
+	import ReportForm from "$lib/components/ReportForm.svelte";
 	import UserProfile from "$lib/components/UserProfile.svelte";
 	let { data } = $props();
 	const auth = useAuth();
@@ -83,7 +84,13 @@
 	title={data.user.username}
 	description={`${data.user.username}'s CompCube rank, rating, match record, and win streak.`}
 	path={`/users/${data.user.guid}`} />
-<div class="page-shell"><UserProfile user={data.user} /></div>
+<div class="page-shell">
+	<UserProfile user={data.user} />
+	<ReportForm
+		targets={[data.user]}
+		heading={`Report ${data.user.username}`}
+		description="Report behavior involving this player. You can submit a report from their profile even when there is no associated match." />
+</div>
 {#if data.canModerate}
 	<section class="page-shell moderation surface">
 		<div>

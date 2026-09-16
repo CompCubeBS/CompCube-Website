@@ -38,7 +38,7 @@
 				<a href={link.href} class:active={isActive(link.href)}
 					>{link.label}</a>
 			{/each}
-			{#if auth.profile?.permissions.some((permission) => ["role:admin", "role:dev"].includes(permission))}<a href="/admin/users" class:active={isActive("/admin")}><i class="pi pi-shield"></i> Admin</a>{/if}
+			{#if auth.profile?.permissions.some((permission) => ["role:moderator", "role:admin", "role:dev"].includes(permission))}<a href="/admin/reports" class:active={isActive("/admin")}><i class="pi pi-shield"></i> Moderation</a>{/if}
 		</div>
 
 		<div class="account">
@@ -73,7 +73,7 @@
 					class:active={isActive(link.href)}
 					onclick={() => (menuOpen = false)}>{link.label}</a>
 			{/each}
-			{#if auth.profile?.permissions.some((permission) => ["role:admin", "role:dev"].includes(permission))}<a href="/admin/users" onclick={() => (menuOpen = false)}>Administration</a>{/if}
+			{#if auth.profile?.permissions.some((permission) => ["role:moderator", "role:admin", "role:dev"].includes(permission))}<a href="/admin/reports" onclick={() => (menuOpen = false)}>Moderation</a>{/if}
 			{#if auth.isAuthenticated}
 				<a href="/profile" onclick={() => (menuOpen = false)}
 					>My profile</a>

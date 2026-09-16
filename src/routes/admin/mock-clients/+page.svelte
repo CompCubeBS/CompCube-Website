@@ -92,7 +92,7 @@
 <PageHeader title="Mock clients" description="Impersonate existing platform accounts and drive the real match state machine without public history or MMR changes." />
 
 <section class="page-shell page-section mock-page">
-	<nav class="admin-nav"><a href="/admin/users"><i class="pi pi-users"></i>Users</a><a href="/admin/competition"><i class="pi pi-sliders-h"></i>Competition</a><a class="active" href="/admin/mock-clients"><i class="pi pi-desktop"></i>Mock clients</a></nav>
+	<nav class="admin-nav"><a href="/admin/reports"><i class="pi pi-flag"></i>Reports</a><a href="/admin/users"><i class="pi pi-users"></i>Users</a><a href="/admin/competition"><i class="pi pi-sliders-h"></i>Competition</a><a class="active" href="/admin/mock-clients"><i class="pi pi-desktop"></i>Mock clients</a></nav>
 	<form onsubmit={createMatch} class="surface create">
 		<div><p class="eyebrow">New private run</p><h2>Create mock match</h2></div>
 		<label>Red platform ID<input name="redPlatformId" required inputmode="numeric" /></label>

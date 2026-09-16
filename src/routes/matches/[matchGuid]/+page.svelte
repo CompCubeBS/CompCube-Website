@@ -7,7 +7,8 @@
 	import { useAuth } from "$lib/auth.svelte";
 	import Button from "$lib/components/Button.svelte";
 	import PageMeta from "$lib/components/PageMeta.svelte";
-	import { parseResponse, type MatchAuditEvent, type MatchParticipant } from "compcube-client";
+	import ReportForm from "$lib/components/ReportForm.svelte";
+	import type { MatchAuditEvent, MatchParticipant } from "compcube-client";
 	import { onMount } from "svelte";
 	let { data } = $props();
 	const auth = useAuth();
@@ -16,7 +17,6 @@
 	let liveMessage = $state("Connecting to live match…");
 	let notice = $state<{ success: boolean; message: string } | null>(null);
 	let submitting = $state(false);
-	let reportSubmitted = $state(false);
 	const competitors = $derived(
 		data.match.participants?.filter(
 			(participant) => participant.role !== "spectator",
@@ -28,20 +28,8 @@
 	const blue = $derived(
 		competitors.find((participant) => participant.role === "blue"),
 	);
-	const viewerParticipant = $derived(
-		competitors.find((participant) => participant.userGuid === auth.profile?.guid),
-	);
-	const reportableOpponent = $derived(
-		auth.isAuthenticated &&
-		viewerParticipant &&
-		!data.match.isMock &&
-		["completed", "aborted"].includes(data.match.status)
-			? competitors.find(
-					(participant) =>
-						participant.userGuid !== viewerParticipant.userGuid &&
-						participant.role !== viewerParticipant.role,
-				)
-			: undefined,
+	const reportTargets = $derived(
+		competitors.flatMap((participant) => participant.user ? [participant.user] : []),
 	);
 	const rounds = $derived(
 		[...(data.match.rounds ?? [])].sort(
@@ -150,26 +138,6 @@
 	async function declareWinner(event: SubmitEvent) {
 		const form = values(event);
 		await runMutation(() => createApiClient(fetch, auth.token).moderation.decision({ matchGuid: data.match.guid, action: "declare_winner", winnerUserGuid: String(form.get("winnerUserGuid") ?? ""), winnerMmrGain: Number(form.get("winnerMmrGain")), loserMmrLoss: Number(form.get("loserMmrLoss")), reason: String(form.get("reason") ?? "").trim() }), "Winner and final MMR changes applied.");
-	}
-	async function reportOpponent(event: SubmitEvent) {
-		const form = values(event);
-		if (!reportableOpponent) return;
-		submitting = true;
-		notice = null;
-		try {
-			await parseResponse(await createApiClient(fetch, auth.token).reports.create({
-				matchGuid: data.match.guid,
-				targetUserGuid: reportableOpponent.userGuid,
-				reason: String(form.get("reason") ?? "").trim(),
-				source: "website",
-			}));
-			reportSubmitted = true;
-			notice = { success: true, message: `Your report about ${name(reportableOpponent)} was submitted for moderator review.` };
-		} catch (error) {
-			notice = { success: false, message: error instanceof Error ? error.message : "The report could not be submitted." };
-		} finally {
-			submitting = false;
-		}
 	}
 
 	onMount(() => {
@@ -378,27 +346,13 @@
 		</p>{/if}
 </section>
 
-{#if reportableOpponent || reportSubmitted}<section class="page-shell report-section">
-	<article class="surface report-card">
-		<div>
-			<p class="eyebrow">Player safety</p>
-			<h2>Report an incident</h2>
-			<p>Reports are tied to this match and are only visible to the moderation team.</p>
-		</div>
-		{#if reportSubmitted}
-			<p class="report-confirmation"><i class="pi pi-check-circle"></i> Report received. The moderation team can now review the match record.</p>
-		{:else if reportableOpponent}
-			<form onsubmit={reportOpponent}>
-				<label for="report-reason">What happened while playing {name(reportableOpponent)}?</label>
-				<textarea id="report-reason" name="reason" minlength="10" maxlength="2000" rows="4" required placeholder="Describe the behavior and when it happened. Please be factual and specific."></textarea>
-				<div class="report-submit">
-					<small>10–2,000 characters · You can submit one report for this opponent in this match.</small>
-					<Button type="submit" variant="danger" disabled={submitting} loading={submitting}><i class="pi pi-flag"></i>Submit report</Button>
-				</div>
-			</form>
-		{/if}
-	</article>
-</section>{/if}
+<section class="page-shell report-section">
+	<ReportForm
+		targets={reportTargets}
+		associatedMatchGuid={data.match.guid}
+		heading="Report a player from this match"
+		description="Participants and spectators can report a player. The match record will be attached for moderator context." />
+</section>
 
 {#if !["completed", "aborted"].includes(data.match.status) && red?.platformId && blue?.platformId}<section class="page-shell detail-section">
 	<div class="section-title">
@@ -695,56 +649,6 @@
 	.report-section {
 		padding-block: 0 3rem;
 	}
-	.report-card {
-		display: grid;
-		grid-template-columns: minmax(14rem, 0.75fr) minmax(18rem, 1.25fr);
-		gap: 2rem;
-		padding: 1.25rem;
-		border-color: rgba(240, 78, 100, 0.28);
-	}
-	.report-card h2 {
-		margin: 0.25rem 0;
-	}
-	.report-card p,
-	.report-card small {
-		color: var(--text-muted);
-	}
-	.report-card form,
-	.report-card label {
-		display: grid;
-		gap: 0.6rem;
-	}
-	.report-card label {
-		font: 600 0.75rem var(--font-secondary);
-	}
-	.report-card textarea {
-		width: 100%;
-		box-sizing: border-box;
-		resize: vertical;
-		padding: 0.75rem;
-		border: 1px solid var(--border);
-		border-radius: 0.4rem;
-		background: var(--background);
-		color: var(--text);
-		font: inherit;
-	}
-	.report-card textarea:focus {
-		outline: 1px solid var(--red);
-		border-color: var(--red);
-	}
-	.report-submit {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-	.report-confirmation {
-		align-self: center;
-		padding: 1rem;
-		border-left: 2px solid var(--success);
-		background: rgba(85, 219, 156, 0.08);
-		color: var(--success) !important;
-	}
 	.detail-section {
 		padding-block: 3rem;
 		border-top: 1px solid var(--border);
@@ -887,13 +791,6 @@
 		}
 		.current-grid {
 			grid-template-columns: 1fr;
-		}
-		.report-card {
-			grid-template-columns: 1fr;
-		}
-		.report-submit {
-			align-items: stretch;
-			flex-direction: column;
 		}
 		.map {
 			grid-template-columns: 5rem 1fr;

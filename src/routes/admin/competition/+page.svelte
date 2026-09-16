@@ -67,7 +67,7 @@
 	description="Configure every object that controls matchmaking and map selection." />
 <section class="page-shell page-section admin-page">
 	<div class="admin-nav">
-		<a href="/admin/users"><i class="pi pi-users"></i>Users</a><a
+		<a href="/admin/reports"><i class="pi pi-flag"></i>Reports</a><a href="/admin/users"><i class="pi pi-users"></i>Users</a><a
 			class="active"
 			href="/admin/competition"
 			><i class="pi pi-sliders-h"></i>Competition</a
