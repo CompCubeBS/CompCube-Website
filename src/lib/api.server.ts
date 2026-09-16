@@ -4,12 +4,17 @@ import { CompCubeClient } from "compcube-client";
 
 function instrumentedFetch(
 	fetchImplementation: typeof globalThis.fetch,
+	authToken?: string | null,
 ): typeof globalThis.fetch {
 	return async (input, init) => {
 		const headers = new Headers(
 			input instanceof Request ? input.headers : undefined,
 		);
 		new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
+		const normalizedToken = authToken?.trim().replace(/^Bearer\s+/i, "");
+		if (normalizedToken && !headers.has("authorization")) {
+			headers.set("authorization", `Bearer ${normalizedToken}`);
+		}
 		const requestId = headers.get("x-request-id") ?? crypto.randomUUID();
 		headers.set("x-request-id", requestId);
 		const authorization = headers.get("authorization");
@@ -73,7 +78,7 @@ export function createApiClient(
 			publicEnv.PUBLIC_COMPCUBE_SOCKET_URL ||
 			publicEnv.PUBLIC_COMPCUBE_API_URL ||
 			"https://api.compcube.net",
-		fetch: instrumentedFetch(fetchImplementation),
+		fetch: instrumentedFetch(fetchImplementation, token),
 		authToken: token,
 	});
 }
