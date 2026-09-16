@@ -28,3 +28,26 @@ export function cookieDomain(hostname: string): string | undefined {
 		? ".compcube.net"
 		: undefined;
 }
+
+/** Returns true shortly before JWT expiry so server-side requests can refresh safely. */
+export function jwtExpiresSoon(
+	token: string,
+	leewayMilliseconds = 30_000,
+): boolean {
+	try {
+		const part = token.split(".")[1];
+		if (!part) return false;
+		const base64 = part.replace(/-/g, "+").replace(/_/g, "/");
+		const normalized = base64.padEnd(
+			base64.length + ((4 - (base64.length % 4)) % 4),
+			"=",
+		);
+		const payload = JSON.parse(atob(normalized)) as { exp?: unknown };
+		return (
+			typeof payload.exp === "number" &&
+			payload.exp * 1000 <= Date.now() + leewayMilliseconds
+		);
+	} catch {
+		return false;
+	}
+}

@@ -14,6 +14,10 @@ Copy `.env.example` to `.env` and configure:
 
 The BeatKhana OAuth application must register `${PUBLIC_COMPCUBE_API_URL}/oauth/callback` as its exact redirect URI.
 
+## Authentication
+
+The OAuth callback stores the BeatKhana access and refresh tokens in secure HttpOnly cookies for the website session. Cookies are storage only: SvelteKit reads the access token server-side and the local `CompCube-Client` sends it to every protected API endpoint as `Authorization: Bearer <access-token>`. When the access token expires, SvelteKit reads the refresh cookie and sends that value to the refresh endpoint as a bearer header before updating both cookies. The API does not authenticate from cookies. Browser-side protected requests receive the access token through the hydrated auth state and use the same bearer header.
+
 ```sh
 npm install
 npm run dev
