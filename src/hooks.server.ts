@@ -6,11 +6,19 @@ import type { Handle } from "@sveltejs/kit";
 export const handle: Handle = async ({ event, resolve }) => {
 	let accessToken = event.cookies.get(AUTH_TOKEN_COOKIE) ?? null;
 	const refreshToken = event.cookies.get(REFRESH_TOKEN_COOKIE);
+	const initialAccessCookiePresent = Boolean(accessToken);
+	const initialAccessTokenExpiresSoon = Boolean(
+		accessToken && jwtExpiresSoon(accessToken),
+	);
+	let refreshAttempted = false;
+	let refreshStatus: number | "network_error" | null = null;
 
 	if ((!accessToken || jwtExpiresSoon(accessToken)) && refreshToken) {
+		refreshAttempted = true;
 		const response = await createApiClient(event.fetch)
 			.auth.refresh(refreshToken)
 			.catch(() => null);
+		refreshStatus = response?.status ?? "network_error";
 		if (response?.ok) {
 			const token = await response.json();
 			const options = {
@@ -44,5 +52,28 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	event.locals.authToken =
 		accessToken && !jwtExpiresSoon(accessToken, 0) ? accessToken : null;
-	return resolve(event);
+	const response = await resolve(event);
+	const isDocumentRequest =
+		event.request.headers.get("sec-fetch-dest") === "document";
+	if (isDocumentRequest || initialAccessCookiePresent || refreshToken) {
+		console.info(JSON.stringify({
+			timestamp: new Date().toISOString(),
+			type: "website_auth_session",
+			requestId:
+				event.request.headers.get("cf-ray") ??
+				event.request.headers.get("x-request-id") ??
+				null,
+			hostname: event.url.hostname,
+			path: event.url.pathname,
+			status: response.status,
+			cookieHeaderPresent: Boolean(event.request.headers.get("cookie")),
+			accessCookiePresent: initialAccessCookiePresent,
+			refreshCookiePresent: Boolean(refreshToken),
+			accessTokenExpiresSoon: initialAccessTokenExpiresSoon,
+			refreshAttempted,
+			refreshStatus,
+			apiBearerAvailable: Boolean(event.locals.authToken),
+		}));
+	}
+	return response;
 };
